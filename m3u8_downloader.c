@@ -232,10 +232,13 @@ int main(int argc, char **argv)
     printf("ERROR: %s\n", curl_easy_strerror(result));
     return result;
   }
-  //fclose(fp);
+  printf("urlbuffer:%s\n", urlbuffer);
+
   sprintf(scriptcontent, "%s%s%s", SCRIPT_FIRSTPART, urlbuffer, SCRIPT_SECONDPART);
   printf("scriptcontent:\n%s\n", scriptcontent);
+  printf("urlbuffer:\n%s\n", urlbuffer);
 
+  system("clear");
   fp3 = fopen("highres.js", "wb");
   fwrite(scriptcontent, 1, strlen(scriptcontent), fp3);
   fclose(fp3);
@@ -248,21 +251,22 @@ int main(int argc, char **argv)
   }
 
 #if 0
-  while (fgets(path, sizeof(path), fp3) != NULL)
+  char path2[1035];
+  while (fgets(path2, sizeof(path2), fp3) != NULL)
   {
     //usleep(10000);
-    printf("%s", path);
+    printf("%s", path2);
   }
 
 #endif
 
   //double dl;
   curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD, &dl);
-  if (1)
-  {
-    printf("Downloaded %.0f bytes\n", dl);
-  }
-  progindex_content = malloc(sizeof(char) * dl * 2);
+
+  printf("Downloaded %.0f bytes\n", dl);
+
+  progindex_content = malloc(sizeof(char) * dl * 3);
+  memset(progindex_content, 0, sizeof(sizeof(char) * dl * 3));
   i = 0;
   while (!feof(fp3))
   {
@@ -270,6 +274,7 @@ int main(int argc, char **argv)
     i++;
   }
   printf("%s\n", progindex_content);
+  printf("ival %d\n", i);
   pclose(fp3);
 
   fp = fopen(argv[2], "wb");
@@ -290,7 +295,7 @@ int main(int argc, char **argv)
     }
   }
 
-  for (i = 0; i < dl * 2; i++)
+  for (i = 0; i < dl * 3; i++)
   {
     //memset(urlbuffer, 0, 100);
     SearchReturn = LookForArrayInsideArray(progindex_content, 2 * dl, "url", 3, i + 1);
