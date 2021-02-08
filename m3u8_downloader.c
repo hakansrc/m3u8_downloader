@@ -7,25 +7,14 @@
 #endif
 #include <curl/curl.h>
 
-#if 0
-struct my_info
-{
-  int shoesize;
-  char *secret;
-};
+#define SCRIPT_FIRSTPART "const M3U8FileParser = require('m3u8-file-parser');\n\
+const fs = require('fs');\n\
+const content = fs.readFileSync('" /*master.m3u8*/
 
-static size_t header_callback(char *buffer, size_t size,
-                              size_t nitems, void *userdata)
-{
-  struct my_info *i = (struct my_info *)userdata;
-
-  /* now this callback can access the my_info struct */
-
-  return nitems * size;
-}
-
-struct my_info my = {10, "the cookies are in the cupboard"};
-#endif
+#define SCRIPT_SECONDPART "', { encoding: 'utf-8' });\n\
+const reader = new M3U8FileParser();\n\
+reader.read(content);\n\
+console.log(JSON.stringify(reader.getResult(), null, 2));"
 
 int LookForArrayInsideArray(char *cpHaystack, int HaystackSize, char *cpNeedle, int NeedleSize, int ElementCount);
 
@@ -42,6 +31,9 @@ int main(int argc, char **argv)
   int is_it_dir = 0;
   char dirnamebuffer[100];
   char dircommandbuffer[150];
+  char scriptcontent[500];
+
+  char *progindex_content;
 
   //char highes
 
@@ -144,6 +136,7 @@ int main(int argc, char **argv)
     parsedoutput[i] = getc(fp2);
     i++;
   }
+  //fclose(fp2);
   printf("parsedoutput:%s\n", parsedoutput);
   int SearchReturn = 0;
   int ResolutionValue = 0;
@@ -151,6 +144,7 @@ int main(int argc, char **argv)
   int MaxResIndex = 0;
   int MaxResUrlIndex = 0;
   char urlbuffer[100];
+  char filepathbuffer[200];
   for (i = 0; i < dl * 3; i++)
   {
     SearchReturn = LookForArrayInsideArray(parsedoutput, 3 * dl, "resolution", 10, i + 1);
@@ -182,6 +176,7 @@ int main(int argc, char **argv)
     }
     else
     {
+      urlbuffer[i] = '\0';
       break;
     }
   }
@@ -222,9 +217,10 @@ int main(int argc, char **argv)
       break;
     }
   }
-  fp3 = fopen(urlbuffer, "wb");
 
-  curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp3);
+  fclose(fp);
+  fp = fopen(urlbuffer, "wb");
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
 
   result = curl_easy_perform(curl);
   if (result == CURLE_OK)
@@ -236,9 +232,126 @@ int main(int argc, char **argv)
     printf("ERROR: %s\n", curl_easy_strerror(result));
     return result;
   }
+  //fclose(fp);
+  sprintf(scriptcontent, "%s%s%s", SCRIPT_FIRSTPART, urlbuffer, SCRIPT_SECONDPART);
+  printf("scriptcontent:\n%s\n", scriptcontent);
+
+  fp3 = fopen("highres.js", "wb");
+  fwrite(scriptcontent, 1, strlen(scriptcontent), fp3);
   fclose(fp3);
 
-  return 0;
+  fp3 = popen("node highres.js", "r");
+  if (fp3 == NULL)
+  {
+    printf("Failed to run command\n");
+    exit(1);
+  }
+
+#if 0
+  while (fgets(path, sizeof(path), fp3) != NULL)
+  {
+    //usleep(10000);
+    printf("%s", path);
+  }
+
+#endif
+
+  //double dl;
+  curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD, &dl);
+  if (1)
+  {
+    printf("Downloaded %.0f bytes\n", dl);
+  }
+  progindex_content = malloc(sizeof(char) * dl * 2);
+  i = 0;
+  while (!feof(fp3))
+  {
+    progindex_content[i] = getc(fp3);
+    i++;
+  }
+  printf("%s\n", progindex_content);
+  pclose(fp3);
+
+  fp = fopen(argv[2], "wb");
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
+  printf("urlbuffer: %s\n", urlbuffer);
+
+  for (i = strlen(urlbuffer); i > 0; i--)
+  {
+    if (urlbuffer[i - 1] == '/') //then we have directories, we have to create those directories
+    {
+      memset(dirnamebuffer, 0, 100);
+      memset(dircommandbuffer, 0, 150);
+      strncpy(dirnamebuffer, urlbuffer, i);
+      sprintf(dircommandbuffer, "mkdir -p %s", dirnamebuffer);
+      printf("the dir name is :%s \n", dirnamebuffer);
+      system(dircommandbuffer);
+      break;
+    }
+  }
+
+  for (i = 0; i < dl * 2; i++)
+  {
+    //memset(urlbuffer, 0, 100);
+    SearchReturn = LookForArrayInsideArray(progindex_content, 2 * dl, "url", 3, i + 1);
+    if (SearchReturn < 0)
+    {
+      break;
+    }
+#if 1
+    for (j = 0; j < 100; j++)
+    {
+      if (progindex_content[SearchReturn + 7 + j] != '\"')
+      {
+        urlbuffer[j] = progindex_content[SearchReturn + 7 + j];
+      }
+      else
+      {
+        urlbuffer[j] = '\0';
+        break;
+      }
+    }
+#endif
+    printf("urlbuffer: %s\n", urlbuffer);
+    sprintf(filepathbuffer, "%s%s", dirnamebuffer, urlbuffer);
+    printf("filepathbuffer: %s\n", filepathbuffer);
+
+    uc = curl_url_set(h, CURLUPART_URL, argv[1], 0);
+    if (uc)
+    {
+      return -1;
+    }
+    uc = curl_url_set(h, CURLUPART_URL, filepathbuffer, 0);
+    if (uc)
+    {
+      printf("url get error \n");
+      return -1;
+    }
+    uc = curl_url_get(h, CURLUPART_PATH, &path, 0);
+    if (!uc)
+    {
+      printf("path: %s\n", path);
+    }
+
+    memset(wholeurl, 0, 500);
+    sprintf(wholeurl, "%s%s%s", "https://", host, path);
+    printf("dirnamebuffer: %s\n", dirnamebuffer);
+    printf("wholeurl: %s\n", wholeurl);
+    printf("path: %s\n", path);
+    //continue;
+    //curl_easy_setopt(curl, CURLOPT_URL, wholeurl);
+    curl_easy_setopt(curl, CURLOPT_URL, wholeurl);
+    result = curl_easy_perform(curl);
+    if (result == CURLE_OK)
+    {
+      printf("Download is successfull\n");
+    }
+    else
+    {
+      printf("ERROR: %s\n", curl_easy_strerror(result));
+      return result;
+    }
+  }
 
 #endif
 #if 0
