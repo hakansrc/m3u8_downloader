@@ -34,11 +34,46 @@ int main(int argc, char **argv)
   CURL *curl;
   FILE *fp;
   FILE *fp2;
+  FILE *fp3;
+  CURLU *h;
+  CURLUcode uc;
+  char *host;
+  char *path;
+
+  char wholeurl[500];
+
+  h = curl_url(); /* get a handle to work with */
+  if (!h)
+  {
+    return -1;
+  }
+
+  /* parse a full URL */
+  uc = curl_url_set(h, CURLUPART_URL, argv[1], 0);
+  if (uc)
+  {
+    return -1;
+  }
+  /* extract host name from the parsed URL */
+  uc = curl_url_get(h, CURLUPART_HOST, &host, 0);
+  if (!uc)
+  {
+    printf("Host name: %s\n", host);
+  }
+
+  /* extract the path from the parsed URL */
+  uc = curl_url_get(h, CURLUPART_PATH, &path, 0);
+  if (!uc)
+  {
+    printf("Path: %s\n", path);
+    curl_free(path);
+  }
+
   //char *readptr;
   int result;
 
   //fp = fopen(argv[2], "wb");
-  fp = fopen("output.m3u8", "wb");
+  fp = fopen("master.m3u8", "wb");
 
   printf("The download operation will start\n");
 
@@ -161,6 +196,57 @@ int main(int argc, char **argv)
     printf("urlbuffer: %s\n", urlbuffer);
     printf("urloffset: %d\n", urloffset);
     usleep(10000);
+
+    uc = curl_url_set(h, CURLUPART_URL, argv[1], 0);
+    if (uc)
+    {
+      return -1;
+    }
+
+    uc = curl_url_set(h, CURLUPART_URL, urlbuffer, 0);
+    if (uc)
+    {
+      printf("url get error \n");
+      return -1;
+    }
+    uc = curl_url_get(h, CURLUPART_PATH, &path, 0);
+    if (!uc)
+    {
+      printf("Path: %s\n", path);
+      memset(wholeurl, 0, 500);
+      sprintf(wholeurl, "%s%s%s", "https://", host, path);
+      printf("wholeurl: %s\n", wholeurl);
+
+      curl_easy_setopt(curl, CURLOPT_URL, wholeurl);
+      fp3 = fopen(urlbuffer + 3, "wb");
+      printf("writing into: %s\n", urlbuffer + 3);
+
+#if 0
+      if (LookForArrayInsideArray(urlbuffer, strlen(urlbuffer), "/", 1) >= 0)
+      {
+        printf("yes it is a dir\n");
+      }
+      else
+      {
+        printf("not a dir\n");
+      }
+#endif
+      curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp3);
+
+      result = curl_easy_perform(curl);
+      if (result == CURLE_OK)
+      {
+        printf("Download is successfull\n");
+      }
+      else
+      {
+        printf("ERROR: %s\n", curl_easy_strerror(result));
+        return result;
+      }
+      fclose(fp3);
+
+      curl_free(path);
+    }
   }
 
   /* close */
@@ -169,6 +255,7 @@ int main(int argc, char **argv)
   fclose(fp);
   curl_easy_cleanup(curl);
 
+  curl_free(host);
   return 0;
 }
 
